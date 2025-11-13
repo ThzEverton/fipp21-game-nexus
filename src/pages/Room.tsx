@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Navbar } from '@/components/Navbar';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
-import { api } from '@/services/api';
-import { wsService } from '@/services/websocket';
-import { ArrowLeft, Play, LogOut, Users, PlayCircle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { Navbar } from "@/components/Navbar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/services/api";
+import { wsService } from "@/services/websocket";
+import { ArrowLeft, Play, LogOut, Users, PlayCircle } from "lucide-react";
 
 interface Sala {
   id: number;
@@ -30,26 +30,33 @@ export default function Room() {
   const { idSala } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [sala, setSala] = useState<Sala | null>(null);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [rodadaAtiva, setRodadaAtiva] = useState<Rodada | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingSala, setLoadingSala] = useState(true);
 
   useEffect(() => {
+    if (!idSala) return;
+
+    // carrega dados iniciais
     loadSala();
     loadParticipantes();
     checkRodadaAtiva();
-    
+
+    // websocket
     wsService.connect();
-    wsService.on('participante_entrou', handleParticipanteEntrou);
-    wsService.on('participante_saiu', handleParticipanteSaiu);
-    wsService.on('rodada_iniciada', handleRodadaIniciada);
+    wsService.on("participante_entrou", handleParticipanteEntrou);
+    wsService.on("participante_saiu", handleParticipanteSaiu);
+    wsService.on("rodada_iniciada", handleRodadaIniciada);
 
     return () => {
-      wsService.off('participante_entrou', handleParticipanteEntrou);
-      wsService.off('participante_saiu', handleParticipanteSaiu);
-      wsService.off('rodada_iniciada', handleRodadaIniciada);
+      wsService.off("participante_entrou", handleParticipanteEntrou);
+      wsService.off("participante_saiu", handleParticipanteSaiu);
+      wsService.off("rodada_iniciada", handleRodadaIniciada);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSala]);
 
   const handleParticipanteEntrou = () => {
@@ -65,46 +72,89 @@ export default function Room() {
   };
 
   const loadSala = async () => {
+    if (!idSala) return;
+
     try {
-      const response = await api.get(`/sala/${idSala}`);
-      setSala(response.data);
+      setLoadingSala(true);
+
+      // ⚠️ TENTA BUSCAR A SALA POR UM ENDPOINT VÁLIDO
+      // se o seu backend NÃO tiver GET /sala/:id,
+      // esse try vai falhar e a gente usa um fallback
+      try {
+        const response = await api.get(`/sala/${idSala}`);
+        setSala(response.data);
+      } catch (error) {
+        console.warn(
+          "GET /sala/:id não encontrado, usando dados básicos da rota."
+        );
+        // fallback: cria sala "fake" só pra interface não travar
+        setSala({
+          id: Number(idSala),
+          nome: `Sala #${idSala}`,
+          codigo: String(idSala),
+          criador_id: 0,
+        });
+      }
     } catch (error) {
-      console.error('Erro ao carregar sala:', error);
+      console.error("Erro ao carregar sala:", error);
+      toast({
+        title: "Erro ao carregar sala",
+        description: "Não foi possível carregar os dados da sala.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingSala(false);
     }
   };
 
   const loadParticipantes = async () => {
+    if (!idSala) return;
+
     try {
       const response = await api.get(`/sala/${idSala}/participantes`);
-      setParticipantes(response.data);
+      setParticipantes(response.data || []);
     } catch (error) {
-      console.error('Erro ao carregar participantes:', error);
+      console.error("Erro ao carregar participantes:", error);
+      toast({
+        title: "Erro ao carregar participantes",
+        description: "Não foi possível listar os participantes.",
+        variant: "destructive",
+      });
     }
   };
 
   const checkRodadaAtiva = async () => {
+    if (!idSala) return;
+
     try {
       const response = await api.get(`/rodada/sala/${idSala}/ativa`);
-      setRodadaAtiva(response.data);
+      setRodadaAtiva(response.data || null);
     } catch (error) {
-      console.error('Erro ao verificar rodada ativa:', error);
+      console.error("Erro ao verificar rodada ativa:", error);
+      // se não tiver rodada ativa, só deixa null mesmo
     }
   };
 
   const handleIniciarRodada = async () => {
+    if (!idSala) return;
+
     setIsLoading(true);
     try {
       const response = await api.post(`/rodada/sala/${idSala}/iniciar`);
       setRodadaAtiva(response.data);
+
       toast({
-        title: 'Rodada iniciada!',
-        description: 'A nova rodada foi criada com sucesso.',
+        title: "Rodada iniciada!",
+        description: "A nova rodada foi criada com sucesso.",
       });
     } catch (error: any) {
+      console.error("Erro ao iniciar rodada:", error);
       toast({
-        title: 'Erro ao iniciar rodada',
-        description: error.response?.data?.message || 'Não foi possível iniciar a rodada.',
-        variant: 'destructive',
+        title: "Erro ao iniciar rodada",
+        description:
+          error?.response?.data?.message ||
+          "Não foi possível iniciar a rodada.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -112,22 +162,27 @@ export default function Room() {
   };
 
   const handleSairSala = async () => {
+    if (!idSala) return;
+
     try {
       await api.post(`/sala/${idSala}/sair`);
       toast({
-        title: 'Você saiu da sala',
+        title: "Você saiu da sala",
       });
-      navigate('/dashboard');
+      navigate("/dashboard");
     } catch (error: any) {
+      console.error("Erro ao sair da sala:", error);
       toast({
-        title: 'Erro ao sair da sala',
-        description: error.response?.data?.message || 'Não foi possível sair da sala.',
-        variant: 'destructive',
+        title: "Erro ao sair da sala",
+        description:
+          error?.response?.data?.message || "Não foi possível sair da sala.",
+        variant: "destructive",
       });
     }
   };
 
-  if (!sala) {
+  // enquanto ainda está carregando a info da sala
+  if (loadingSala || !sala) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -147,7 +202,7 @@ export default function Room() {
           <Button
             variant="ghost"
             className="gap-2 text-foreground hover:text-primary"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate("/dashboard")}
           >
             <ArrowLeft className="h-4 w-4" />
             Voltar ao Dashboard
@@ -157,9 +212,14 @@ export default function Room() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-2xl text-accent">{sala.nome}</CardTitle>
+                  <CardTitle className="text-2xl text-accent">
+                    {sala.nome}
+                  </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Código da sala: <span className="font-mono font-semibold text-foreground">{sala.codigo || sala.id}</span>
+                    Código da sala:{" "}
+                    <span className="font-mono font-semibold text-foreground">
+                      {sala.codigo || sala.id}
+                    </span>
                   </p>
                 </div>
                 <Button
@@ -183,7 +243,9 @@ export default function Room() {
             </CardHeader>
             <CardContent>
               {participantes.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">Nenhum participante na sala</p>
+                <p className="text-muted-foreground text-center py-4">
+                  Nenhum participante na sala
+                </p>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {participantes.map((participante) => (
@@ -191,7 +253,9 @@ export default function Room() {
                       key={participante.id}
                       className="p-3 bg-background border border-border rounded-lg text-center"
                     >
-                      <p className="font-semibold text-foreground">{participante.nome}</p>
+                      <p className="font-semibold text-foreground">
+                        {participante.nome}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -207,8 +271,12 @@ export default function Room() {
               {rodadaAtiva ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-primary/10 border border-primary rounded-lg">
-                    <p className="text-foreground font-semibold">Rodada Ativa</p>
-                    <p className="text-sm text-muted-foreground">ID: {rodadaAtiva.id}</p>
+                    <p className="text-foreground font-semibold">
+                      Rodada Ativa
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      ID: {rodadaAtiva.id}
+                    </p>
                   </div>
                   <Link to={`/salas/${idSala}/rodadas/${rodadaAtiva.id}`}>
                     <Button className="w-full bg-primary hover:bg-primary/90 gap-2">
@@ -224,7 +292,7 @@ export default function Room() {
                   className="w-full bg-primary hover:bg-primary/90 gap-2"
                 >
                   <Play className="h-5 w-5" />
-                  {isLoading ? 'Iniciando...' : 'Iniciar Nova Rodada'}
+                  {isLoading ? "Iniciando..." : "Iniciar Nova Rodada"}
                 </Button>
               )}
             </CardContent>

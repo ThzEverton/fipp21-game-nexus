@@ -1,5 +1,11 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api } from '@/services/api';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { api } from "@/services/api";
 
 interface User {
   id: number;
@@ -23,36 +29,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
+    try {
+      const storedToken = localStorage.getItem("token");
+      const storedUser = localStorage.getItem("user");
 
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+      if (storedToken && storedUser) {
+        try {
+          const parsedUser: User = JSON.parse(storedUser);
+
+          setToken(storedToken);
+          setUser(parsedUser);
+          api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+        } catch (err) {
+          console.error("Erro ao fazer JSON.parse do usuário salvo:", err);
+          // se tiver lixo no localStorage, limpa pra não quebrar de novo
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          setToken(null);
+          setUser(null);
+        }
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const signIn = async (email: string, senha: string) => {
-    const response = await api.post('/autenticacao/token', { email, senha });
+    const response = await api.post("/autenticacao/token", { email, senha });
     const { token: newToken, usuario } = response.data;
 
     setToken(newToken);
     setUser(usuario);
 
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(usuario));
+    localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(usuario));
 
-    api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
   };
 
   const signOut = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization'];
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    delete api.defaults.headers.common["Authorization"];
   };
 
   return (
@@ -65,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
