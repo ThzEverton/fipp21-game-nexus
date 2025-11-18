@@ -35,20 +35,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (storedToken && storedUser) {
         try {
-          const parsedUser: User = JSON.parse(storedUser);
+          // 🔥 GARANTE QUE TEM JSON VÁLIDO
+          const parsedUser = JSON.parse(storedUser);
 
-          setToken(storedToken);
-          setUser(parsedUser);
-          api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+          if (parsedUser && parsedUser.id) {
+            setToken(storedToken);
+            setUser(parsedUser);
+            api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
+          } else {
+            console.warn("Usuário salvo está inválido, limpando storage.");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+          }
+
         } catch (err) {
-          console.error("Erro ao fazer JSON.parse do usuário salvo:", err);
-          // se tiver lixo no localStorage, limpa pra não quebrar de novo
+          console.error("Erro ao parsear usuário salvo:", err);
           localStorage.removeItem("token");
           localStorage.removeItem("user");
-          setToken(null);
-          setUser(null);
         }
       }
+
     } finally {
       setIsLoading(false);
     }
@@ -58,11 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.post("/autenticacao/token", { email, senha });
     const { token: newToken, usuario } = response.data;
 
-    setToken(newToken);
-    setUser(usuario);
-
+    // 🔥 GARANTE QUE ESTÁ SALVANDO JSON DE VERDADE
     localStorage.setItem("token", newToken);
     localStorage.setItem("user", JSON.stringify(usuario));
+
+    setToken(newToken);
+    setUser(usuario);
 
     api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
   };
@@ -84,8 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
   }
   return context;
 }
