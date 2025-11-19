@@ -6,11 +6,12 @@ import {
   ReactNode,
 } from "react";
 import { api } from "@/services/api";
+import Cookies from "js-cookie";
 
 interface User {
-  id: number;
-  nome: string;
-  email: string;
+  id?: number;
+  nome?: string;
+  email?: string;
 }
 
 interface AuthContextType {
@@ -28,57 +29,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Carrega token dos cookies quando a app sobe (F5 / abrir aba nova)
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem("token");
-      const storedUser = localStorage.getItem("user");
+    const storedToken = Cookies.get("token");
+    const storedUser = Cookies.get("user");
 
-      if (storedToken && storedUser) {
-        try {
-          // 🔥 GARANTE QUE TEM JSON VÁLIDO
-          const parsedUser = JSON.parse(storedUser);
-
-          if (parsedUser && parsedUser.id) {
-            setToken(storedToken);
-            setUser(parsedUser);
-            api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
-          } else {
-            console.warn("Usuário salvo está inválido, limpando storage.");
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
-          }
-
-        } catch (err) {
-          console.error("Erro ao parsear usuário salvo:", err);
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-        }
-      }
-
-    } finally {
-      setIsLoading(false);
+    if (storedToken) {
+      setToken(storedToken);
+      api.defaults.headers.common["Authorization"] = `Bearer ${storedToken}`;
     }
+
+    if (storedUser) {
+      try {
+        const parsedUser: User = JSON.parse(storedUser);
+        setUser(parsedUser);
+      } catch (err) {
+        console.error("Erro ao parsear usuário salvo:", err);
+        Cookies.remove("user");
+      }
+    }
+
+    setIsLoading(false);
   }, []);
 
   const signIn = async (email: string, senha: string) => {
-    const response = await api.post("/autenticacao/token", { email, senha });
-    const { token: newToken, usuario } = response.data;
+    try {
+      const response = await api.post("/autenticacao/token", { email, senha });
+      console.log("Resposta da API:", response.data);
 
-    // 🔥 GARANTE QUE ESTÁ SALVANDO JSON DE VERDADE
-    localStorage.setItem("token", newToken);
-    localStorage.setItem("user", JSON.stringify(usuario));
+      // ✅ sua API retorna apenas { token }
+      const newToken: string = response.data.token;
 
-    setToken(newToken);
-    setUser(usuario);
+      if (!newToken) {
+        console.error("Token não retornado pela API");
+        Cookies.remove("token");
+        Cookies.remove("user");
+        return;
+      }
 
-    api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+      // Se você quiser mostrar algo na tela, monta um "user fake" só com o e-mail
+      const fakeUser: User = {
+        email,
+        nome: email.split("@")[0], // ex: "cleidejane"
+      };
+
+      setToken(newToken);
+      setUser(fakeUser);
+
+      // grava nos cookies (sem `secure` pra funcionar em http://localhost)
+      Cookies.set("token", newToken, { expires: 7 });
+      Cookies.set("user", JSON.stringify(fakeUser), { expires: 7 });
+
+      api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+    } catch (err) {
+      console.error("Erro ao tentar fazer login:", err);
+      throw err;
+    }
   };
 
   const signOut = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    Cookies.remove("token");
+    Cookies.remove("user");
     delete api.defaults.headers.common["Authorization"];
   };
 
