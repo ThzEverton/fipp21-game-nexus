@@ -74,18 +74,19 @@ export default function Game() {
     }
   };
 
-  const loadEstado = async () => {
-    try {
-      const response = await api.get(`/jogo/rodada/${idRodada}/estado`);
-      setEstado(response.data);
-      
-      if (response.data.cartasJogador?.length > 0) {
-        setTurnoIniciado(true);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar estado:', error);
+ const loadEstado = async () => {
+  try {
+    const response = await api.get(`/jogo/rodada/${idRodada}/estado`);
+    console.log('Estado do jogo:', response.data); // Verifique aqui o que está retornando
+    setEstado(response.data);
+
+    if (response.data.cartasJogador?.length > 0) {
+      setTurnoIniciado(true);
     }
-  };
+  } catch (error) {
+    console.error('Erro ao carregar estado:', error);
+  }
+};
 
   const handleApostar = async (e: React.FormEvent) => {
     e.preventDefault();
