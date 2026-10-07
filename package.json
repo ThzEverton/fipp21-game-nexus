@@ -81,5 +81,6 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19"
-  }
+  },
+  "description": "Frontend de plataforma de jogos com autenticação, salas e comunicação em tempo real."
 }
